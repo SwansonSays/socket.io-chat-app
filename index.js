@@ -17,12 +17,14 @@ await db.exec(`
         client_offset TEXT UNIQUE,
         content TEXT
     );   
-`)
+`);
 
 
 const app = express();
 const server = createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    connectionStateRecovery: {}
+});
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -37,16 +39,21 @@ io.on('connection', async (socket) => {
         console.log('user disconnected');
     });
 
-    socket.on('chat message', async (msg) => {
+    socket.on('chat message', async (msg, clientOffset, callback) => {
         let result;
         try {
-            result = await db.run('INSERT INTO messages (content) VALUES (?)', msg);
+            result = await db.run('INSERT INTO messages (content, client_offset) VALUES (?, ?)', msg, clientOffset);
         } catch (e) {
-            //TODO handle the failure
-            console.log(e);
+            if (e.errno === 19) {
+                callback();
+            } else {
+
+            }
             return;
         }
         io.emit('chat message', msg, result.lastID);
+
+        callback();
     });
 
     if (!socket.recovered) {
